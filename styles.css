@@ -59,3 +59,6 @@ th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3
 .history-item { display: grid; grid-template-columns: 1.2fr 60px 1fr 1fr 1.2fr; gap: 8px; font-size: 0.86rem; padding: 6px; border-bottom: 1px solid var(--border); }
 .history-empty { color: var(--subtle); font-size: 0.9rem; }
 #positionsTable button, #liabilitiesTable button { padding: 4px 8px; font-size: 0.82rem; }
+
+.subtle { color: var(--subtle); margin: 0 0 8px; font-size: 0.9rem; }
+.allocation-item.debt { border-color: #d67a7a; }
