@@ -29,3 +29,7 @@ python3 server.py
 ## Yahoo 查價 API
 - Endpoint: `GET /api/quote?symbol=AAPL&market=US`
 - 台股可用：`GET /api/quote?symbol=2330&market=TW`（會自動轉為 `2330.TW`）
+
+
+## 報價來源
+/api/quote 會依序嘗試多個來源（fallback）：Yahoo chart → Yahoo v7 → Stooq → TWSE（台股）。

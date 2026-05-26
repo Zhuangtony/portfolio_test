@@ -25,13 +25,12 @@ def yahoo_quote_chart(symbol: str):
         return None
     return {
         "exists": True,
+        "provider": "yahoo_chart",
         "symbol": meta.get("symbol", symbol),
         "name": meta.get("longName") or meta.get("shortName") or meta.get("symbol", symbol),
         "currency": meta.get("currency"),
         "price": price,
-        "previousClose": meta.get("previousClose"),
         "exchangeName": meta.get("exchangeName"),
-        "source": "chart",
     }
 
 
@@ -47,26 +46,79 @@ def yahoo_quote_v7(symbol: str):
         return None
     return {
         "exists": True,
+        "provider": "yahoo_v7",
         "symbol": q.get("symbol", symbol),
         "name": q.get("longName") or q.get("shortName") or q.get("symbol", symbol),
         "currency": q.get("currency"),
         "price": price,
-        "previousClose": q.get("regularMarketPreviousClose"),
         "exchangeName": q.get("fullExchangeName") or q.get("exchange"),
-        "source": "quote",
     }
 
 
-def yahoo_quote(symbol: str):
+def stooq_quote(symbol: str):
+    # stooq uses US as plain ticker; TW format often as 2330.tw
+    stooq_symbol = symbol.lower()
+    if symbol.endswith('.TW'):
+        stooq_symbol = symbol.replace('.TW', '.tw').lower()
+    url = f"https://stooq.com/q/l/?s={urllib.parse.quote(stooq_symbol)}&f=sd2t2ohlcvn&e=json"
+    data = _fetch_json(url)
+    rows = data.get("symbols") or []
+    if not rows:
+        return None
+    row = rows[0]
+    close = row.get("close")
+    if close in (None, "N/D"):
+        return None
+    price = float(close)
+    return {
+        "exists": True,
+        "provider": "stooq",
+        "symbol": (row.get("symbol") or symbol).upper(),
+        "name": row.get("name") or symbol,
+        "currency": "USD" if ".TW" not in symbol else "TWD",
+        "price": price,
+        "exchangeName": "STOOQ",
+    }
+
+
+def twse_quote(symbol: str):
+    # only for TW numeric tickers
+    if not symbol.endswith('.TW'):
+        return None
+    code = symbol.split('.')[0]
+    url = f"https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_{code}.tw&json=1&delay=0"
+    data = _fetch_json(url)
+    msg_array = data.get("msgArray") or []
+    if not msg_array:
+        return None
+    row = msg_array[0]
+    price = row.get("z")
+    if not price or price == '-':
+        price = row.get("y")
+    if not price or price == '-':
+        return None
+    return {
+        "exists": True,
+        "provider": "twse",
+        "symbol": symbol,
+        "name": row.get("n") or symbol,
+        "currency": "TWD",
+        "price": float(price),
+        "exchangeName": "TWSE",
+    }
+
+
+def get_quote(symbol: str):
     errors = []
-    for fn in (yahoo_quote_chart, yahoo_quote_v7):
+    sources = [yahoo_quote_chart, yahoo_quote_v7, stooq_quote, twse_quote]
+    for fn in sources:
         try:
             quote = fn(symbol)
             if quote:
                 return quote
         except Exception as e:
             errors.append(f"{fn.__name__}: {e}")
-    return {"exists": False, "symbol": symbol, "error": " | ".join(errors) or "Symbol not found"}
+    return {"exists": False, "symbol": symbol, "error": " | ".join(errors) or "No quote from providers"}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -82,7 +134,7 @@ class Handler(SimpleHTTPRequestHandler):
             final_symbol = symbol.upper()
             if market == "TW" and final_symbol.isdigit() and ".TW" not in final_symbol:
                 final_symbol = f"{final_symbol}.TW"
-            payload = yahoo_quote(final_symbol)
+            payload = get_quote(final_symbol)
             code = 200 if payload.get("exists") else 502
             self.send_json(payload, code)
             return
