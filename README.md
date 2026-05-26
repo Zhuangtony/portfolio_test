@@ -10,7 +10,7 @@
 - 投組 vs Benchmark 折線圖，支援切換顯示 S&P500 / TAIEX / 兩者。
 - 支援新增持倉與新增負債（前端 Demo 狀態）。
 - 支援背景主題切換（深色/淺色），並記住使用者偏好。
-- 串接 Yahoo Finance API：可查詢代號是否存在，並取得真實市場報價。
+- 串接 Yahoo Finance API：使用者輸入股票代碼後可自動驗證並帶入現價。
 
 ## 如何啟動
 請用 Python server 啟動（含 `/api/quote`）：

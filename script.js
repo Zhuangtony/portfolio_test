@@ -4,13 +4,13 @@ const now = () => new Date().toLocaleString('zh-TW');
 
 const state = {
   positions: [
-    { id: uid(), market: 'US', symbol: 'AAPL', name: 'Apple', shares: 20, cost: 175, price: 198, ccy: 'USD', createdAt: now() },
-    { id: uid(), market: 'US', symbol: 'VOO', name: 'Vanguard S&P500 ETF', shares: 12, cost: 430, price: 480, ccy: 'USD', createdAt: now() },
-    { id: uid(), market: 'TW', symbol: '2330', name: '台積電', shares: 30, cost: 760, price: 880, ccy: 'TWD', createdAt: now() },
+    { id: uid(), market: 'US', symbol: 'AAPL', name: 'Apple', shares: 20, cost: 175, price: 198, ccy: 'USD' },
+    { id: uid(), market: 'US', symbol: 'VOO', name: 'Vanguard S&P500 ETF', shares: 12, cost: 430, price: 480, ccy: 'USD' },
+    { id: uid(), market: 'TW', symbol: '2330', name: '台積電', shares: 30, cost: 760, price: 880, ccy: 'TWD' },
   ],
   liabilities: [
-    { id: uid(), type: '房貸', balance: 2800000, rate: 2.1, monthlyPayment: 28000, createdAt: now() },
-    { id: uid(), type: '信用貸款', balance: 320000, rate: 4.5, monthlyPayment: 9500, createdAt: now() },
+    { id: uid(), type: '房貸', balance: 2800000, rate: 2.1, monthlyPayment: 28000 },
+    { id: uid(), type: '信用貸款', balance: 320000, rate: 4.5, monthlyPayment: 9500 },
   ],
   positionHistory: [],
   liabilityHistory: [],
@@ -45,8 +45,8 @@ function renderTables(result) {
   document.querySelector('#positionsTable tbody').innerHTML = result.enriched.map(p => `<tr><td>${p.market}</td><td>${p.symbol}</td><td>${p.name}</td><td>${format(p.shares)}</td><td>${format(p.costTwd)}</td><td>${format(p.valueTwd)}</td><td class="${p.pnl >= 0 ? 'positive' : 'negative'}">${format(p.pnl)}</td><td class="${p.roi >= 0 ? 'positive' : 'negative'}">${percent(p.roi)}</td><td><button data-del-position="${p.id}">刪除</button></td></tr>`).join('');
   document.querySelector('#liabilitiesTable tbody').innerHTML = state.liabilities.map(l => `<tr><td>${l.type}</td><td>${format(l.balance)}</td><td>${l.rate.toFixed(2)}%</td><td>${format(l.monthlyPayment)}</td><td><button data-del-liability="${l.id}">刪除</button></td></tr>`).join('');
 
-  document.getElementById('positionHistory').innerHTML = state.positionHistory.length ? state.positionHistory.map(h => `<div class="history-item"><span>${h.at}</span><span>${h.action}</span><span>${h.symbol}</span><span>${h.market}</span><span>${h.note}</span></div>`).join('') : '<div class="history-empty">尚無持倉歷史</div>';
-  document.getElementById('liabilityHistory').innerHTML = state.liabilityHistory.length ? state.liabilityHistory.map(h => `<div class="history-item"><span>${h.at}</span><span>${h.action}</span><span>${h.type}</span><span>${h.note}</span></div>`).join('') : '<div class="history-empty">尚無負債歷史</div>';
+  document.getElementById('positionHistory').innerHTML = state.positionHistory.length ? state.positionHistory.map(h => `<div class="history-item"><span>${h.at}</span><span>${h.action}</span><span>${h.symbol}</span><span>${h.market}</span><span>${h.note}</span></div>`).join('') : '<div class="history-empty">尚無持倉新增歷史</div>';
+  document.getElementById('liabilityHistory').innerHTML = state.liabilityHistory.length ? state.liabilityHistory.map(h => `<div class="history-item"><span>${h.at}</span><span>${h.action}</span><span>${h.type}</span><span>${h.note}</span></div>`).join('') : '<div class="history-empty">尚無負債新增歷史</div>';
 }
 
 function renderCharts(result) {
@@ -66,23 +66,37 @@ function bindEvents() {
   themeToggle.addEventListener('click', () => { body.classList.toggle('light'); const isLight = body.classList.contains('light'); localStorage.setItem('theme', isLight ? 'light' : 'dark'); themeToggle.textContent = `切換背景：${isLight ? '淺色' : '深色'}`; });
 
   const positionForm = document.getElementById('positionForm');
-  document.getElementById('fetchQuoteBtn').addEventListener('click', async () => {
-    const data = new FormData(positionForm); const symbol = String(data.get('symbol') || '').trim(); const market = String(data.get('market') || 'US');
-    if (!symbol) return setStatus('請先輸入股票代號', true); setStatus('正在查詢 Yahoo Finance...');
-    const quote = await fetchQuote(symbol, market); if (!quote.exists || !quote.price) return setStatus(`查無標的或無報價：${symbol}`, true);
-    positionForm.elements.name.value = quote.name || symbol; positionForm.elements.price.value = Number(quote.price); setStatus(`已驗證 ${quote.symbol} 現價 ${quote.price} ${quote.currency}`);
-  });
+  const symbolInput = positionForm.elements.symbol;
+  const marketInput = positionForm.elements.market;
+
+  async function autoFillPrice() {
+    const symbol = String(symbolInput.value || '').trim();
+    const market = String(marketInput.value || 'US');
+    if (!symbol) return;
+    setStatus('正在查詢 Yahoo Finance...');
+    const quote = await fetchQuote(symbol, market);
+    if (!quote.exists || !quote.price) return setStatus(`查無標的或無報價：${symbol}`, true);
+    positionForm.elements.price.value = Number(quote.price);
+    positionForm.dataset.quoteName = quote.name || symbol.toUpperCase();
+    positionForm.dataset.quoteSymbol = quote.symbol || symbol.toUpperCase();
+    setStatus(`已帶入 ${quote.symbol} 現價 ${quote.price} ${quote.currency}`);
+  }
+
+  symbolInput.addEventListener('blur', autoFillPrice);
+  marketInput.addEventListener('change', autoFillPrice);
+  document.getElementById('fetchQuoteBtn').addEventListener('click', autoFillPrice);
 
   positionForm.addEventListener('submit', e => {
     e.preventDefault(); const data = new FormData(e.target); const market = String(data.get('market'));
-    const row = { id: uid(), market, symbol: String(data.get('symbol')).toUpperCase(), name: String(data.get('name')), shares: Number(data.get('shares')), cost: Number(data.get('cost')), price: Number(data.get('price')), ccy: market === 'US' ? 'USD' : 'TWD', createdAt: now() };
+    const rawSymbol = String(data.get('symbol')).toUpperCase();
+    const row = { id: uid(), market, symbol: positionForm.dataset.quoteSymbol || rawSymbol, name: positionForm.dataset.quoteName || rawSymbol, shares: Number(data.get('shares')), cost: Number(data.get('cost')), price: Number(data.get('price')), ccy: market === 'US' ? 'USD' : 'TWD' };
     state.positions.push(row); state.positionHistory.unshift({ at: now(), action: '新增', symbol: row.symbol, market: row.market, note: `股數 ${row.shares}` });
-    e.target.reset(); rerender();
+    e.target.reset(); delete positionForm.dataset.quoteName; delete positionForm.dataset.quoteSymbol; rerender();
   });
 
   document.getElementById('liabilityForm').addEventListener('submit', e => {
     e.preventDefault(); const data = new FormData(e.target);
-    const row = { id: uid(), type: String(data.get('type')), balance: Number(data.get('balance')), rate: Number(data.get('rate')), monthlyPayment: Number(data.get('monthlyPayment')), createdAt: now() };
+    const row = { id: uid(), type: String(data.get('type')), balance: Number(data.get('balance')), rate: Number(data.get('rate')), monthlyPayment: Number(data.get('monthlyPayment')) };
     state.liabilities.push(row); state.liabilityHistory.unshift({ at: now(), action: '新增', type: row.type, note: `餘額 ${format(row.balance)}` });
     e.target.reset(); rerender();
   });
@@ -92,11 +106,11 @@ function bindEvents() {
   document.addEventListener('click', e => {
     const pId = e.target.getAttribute('data-del-position');
     if (pId) {
-      const idx = state.positions.findIndex(x => x.id === pId); if (idx >= 0) { const row = state.positions[idx]; state.positions.splice(idx, 1); state.positionHistory.unshift({ at: now(), action: '刪除', symbol: row.symbol, market: row.market, note: `刪除持倉` }); rerender(); }
+      const idx = state.positions.findIndex(x => x.id === pId); if (idx >= 0) { state.positions.splice(idx, 1); rerender(); }
     }
     const lId = e.target.getAttribute('data-del-liability');
     if (lId) {
-      const idx = state.liabilities.findIndex(x => x.id === lId); if (idx >= 0) { const row = state.liabilities[idx]; state.liabilities.splice(idx, 1); state.liabilityHistory.unshift({ at: now(), action: '刪除', type: row.type, note: '刪除負債' }); rerender(); }
+      const idx = state.liabilities.findIndex(x => x.id === lId); if (idx >= 0) { state.liabilities.splice(idx, 1); rerender(); }
     }
   });
 }
