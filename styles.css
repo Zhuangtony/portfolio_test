@@ -66,3 +66,7 @@ th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3
 .range-controls button.active { border-color: #67b3ff; box-shadow: 0 0 0 1px #67b3ff inset; }
 .custom-range { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
 .custom-range input { max-width: 160px; }
+.group-row { background: rgba(103,179,255,0.08); }
+.subtable { width: 100%; margin-top: 8px; }
+.subtable th, .subtable td { font-size: 0.85rem; }
+#positionsTable details summary { cursor: pointer; color: var(--subtle); }
