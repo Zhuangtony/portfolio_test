@@ -41,6 +41,9 @@
             <input name="balance" type="number" step="1" placeholder="餘額 TWD" required />
             <input name="rate" type="number" step="0.01" placeholder="利率 %" required />
             <input name="monthlyPayment" type="number" step="1" placeholder="每月應付" required />
+            <input name="startDate" type="date" required />
+            <input name="termMonths" type="number" step="1" placeholder="期數(月)" required />
+            <input name="fees" type="number" step="1" placeholder="相關費用" value="0" required />
             <button type="submit">新增負債</button>
           </form>
         </div>
@@ -101,7 +104,7 @@
       <section class="panel">
         <div>
           <h2>負債總覽</h2>
-          <table id="liabilitiesTable"><thead><tr><th>種類</th><th>餘額 (TWD)</th><th>利率</th><th>每月應付</th><th>操作</th></tr></thead><tbody></tbody></table>
+          <table id="liabilitiesTable"><thead><tr><th>種類</th><th>餘額 (TWD)</th><th>利率</th><th>每月應付</th><th>開始日</th><th>期數(月)</th><th>費用</th><th>操作</th></tr></thead><tbody></tbody></table>
           <details class="history-block" open>
             <summary>負債新增歷史資料（可展開/收合）</summary>
             <div id="liabilityHistory"></div>
