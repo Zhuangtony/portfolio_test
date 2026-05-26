@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Portfolio Demo</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>個人 Portfolio Dashboard（DEMO）</h1>
+        <p>美股 + 台股 + 負債 + Benchmark 比較</p>
+      </div>
+      <div class="header-actions">
+        <button id="themeToggle" type="button">切換背景：深色</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="cards" id="summaryCards"></section>
+
+      <section class="panel form-grid">
+        <div>
+          <h2>新增持倉</h2>
+          <form id="positionForm" class="form-row">
+            <select name="market"><option value="US">美股</option><option value="TW">台股</option></select>
+            <input name="symbol" placeholder="代號 (AAPL/2330)" required />
+            <input name="shares" type="number" step="0.01" placeholder="股數" required />
+            <input name="cost" type="number" step="0.01" placeholder="成本價" required />
+            <div class="inline-input"><input name="price" type="number" step="0.01" placeholder="現價" required /><button type="button" id="fetchQuoteBtn">抓即時價</button></div>
+            <button type="submit">新增持倉</button>
+          </form>
+          <div id="statusText" class="form-status"></div>
+        </div>
+        <div>
+          <h2>新增負債</h2>
+          <form id="liabilityForm" class="form-row">
+            <input name="type" placeholder="類型 (房貸/信貸)" required />
+            <input name="balance" type="number" step="1" placeholder="餘額 TWD" required />
+            <input name="rate" type="number" step="0.01" placeholder="利率 %" required />
+            <input name="monthlyPayment" type="number" step="1" placeholder="每月應付" required />
+            <button type="submit">新增負債</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="panel market-panel">
+        <div>
+          <h2>資產配置圓餅圖（TWD）</h2>
+          <div class="compact-chart-wrap"><canvas id="assetPie"></canvas></div>
+          <div id="allocationList" class="allocation-list"></div>
+        </div>
+        <div>
+          <h2>投組 vs Benchmark（標準化）</h2>
+          <label for="benchmarkSelect">比較指數：</label>
+          <select id="benchmarkSelect">
+            <option value="sp500">S&P 500</option>
+            <option value="twii">TAIEX</option>
+            <option value="both" selected>兩者都顯示</option>
+          </select>
+          <div class="line-chart-wrap"><canvas id="benchmarkLine"></canvas></div>
+        </div>
+      </section>
+
+
+      <section class="panel">
+        <div>
+          <h2>資產/負債隨時間變化</h2>
+          <p class="subtle">可觀察真實資產、負債與淨資產的比例與變化</p>
+          <div class="line-chart-wrap"><canvas id="balanceTrend"></canvas></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div>
+          <h2>持倉總覽</h2>
+          <table id="positionsTable"><thead><tr><th>市場</th><th>代號</th><th>名稱</th><th>股數</th><th>成本</th><th>現值</th><th>損益</th><th>報酬率</th><th>操作</th></tr></thead><tbody></tbody></table>
+          <details class="history-block" open>
+            <summary>持倉新增歷史資料（可展開/收合）</summary>
+            <div id="positionHistory"></div>
+          </details>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div>
+          <h2>負債總覽</h2>
+          <table id="liabilitiesTable"><thead><tr><th>種類</th><th>餘額 (TWD)</th><th>利率</th><th>每月應付</th><th>操作</th></tr></thead><tbody></tbody></table>
+          <details class="history-block" open>
+            <summary>負債新增歷史資料（可展開/收合）</summary>
+            <div id="liabilityHistory"></div>
+          </details>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
