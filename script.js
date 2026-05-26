@@ -33,9 +33,13 @@ function calcMonthlyPayment(balance, annualRate, termMonths) {
 
 
 function calc() {
+  const latestPriceBySymbol = {};
+  for (const pos of state.positions) latestPriceBySymbol[`${pos.market}:${pos.symbol}`] = pos.price;
+
   const enriched = state.positions.map(p => {
-    const costTwd = toTwd(p.cost * p.shares, p.ccy), valueTwd = toTwd(p.price * p.shares, p.ccy), pnl = valueTwd - costTwd;
-    return { ...p, costTwd, valueTwd, pnl, roi: costTwd ? pnl / costTwd : 0 };
+    const unifiedPrice = latestPriceBySymbol[`${p.market}:${p.symbol}`] ?? p.price;
+    const costTwd = toTwd(p.cost * p.shares, p.ccy), valueTwd = toTwd(unifiedPrice * p.shares, p.ccy), pnl = valueTwd - costTwd;
+    return { ...p, price: unifiedPrice, costTwd, valueTwd, pnl, roi: costTwd ? pnl / costTwd : 0 };
   });
   const assets = enriched.reduce((s, p) => s + p.valueTwd, 0), cost = enriched.reduce((s, p) => s + p.costTwd, 0), pnl = assets - cost;
   const liabilitiesTotal = state.liabilities.reduce((s, l) => s + l.balance, 0), netWorth = assets - liabilitiesTotal;
