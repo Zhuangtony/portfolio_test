@@ -62,3 +62,7 @@ th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3
 
 .subtle { color: var(--subtle); margin: 0 0 8px; font-size: 0.9rem; }
 .allocation-item.debt { border-color: #d67a7a; }
+.range-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.range-controls button.active { border-color: #67b3ff; box-shadow: 0 0 0 1px #67b3ff inset; }
+.custom-range { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.custom-range input { max-width: 160px; }
