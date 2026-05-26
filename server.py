@@ -135,7 +135,7 @@ class Handler(SimpleHTTPRequestHandler):
             if market == "TW" and final_symbol.isdigit() and ".TW" not in final_symbol:
                 final_symbol = f"{final_symbol}.TW"
             payload = get_quote(final_symbol)
-            code = 200 if payload.get("exists") else 502
+            code = 200 if payload.get("exists") else 404
             self.send_json(payload, code)
             return
         super().do_GET()
