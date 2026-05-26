@@ -42,10 +42,10 @@ function calcMonthlyPayment(balance, annualRate, termMonths) {
 
 function calc() {
   const latestPriceBySymbol = {};
-  for (const pos of state.positions) latestPriceBySymbol[`${pos.market}:${pos.symbol}`] = pos.price;
+  for (const pos of state.positions) latestPriceBySymbol[`${pos.symbol}`] = pos.price;
 
   const enriched = state.positions.map(p => {
-    const unifiedPrice = latestPriceBySymbol[`${p.market}:${p.symbol}`] ?? p.price;
+    const unifiedPrice = latestPriceBySymbol[`${p.symbol}`] ?? p.price;
     const costTwd = toTwd(p.cost * p.shares, p.ccy), valueTwd = toTwd(unifiedPrice * p.shares, p.ccy), pnl = valueTwd - costTwd;
     return { ...p, price: unifiedPrice, costTwd, valueTwd, pnl, roi: costTwd ? pnl / costTwd : 0 };
   });
@@ -53,8 +53,8 @@ function calc() {
   const liabilitiesTotal = state.liabilities.reduce((s, l) => s + l.balance, 0), netWorth = assets - liabilitiesTotal;
 
   const grouped = Object.values(enriched.reduce((acc, p) => {
-    const key = `${p.market}:${p.symbol}`;
-    if (!acc[key]) acc[key] = { key, market: p.market, symbol: p.symbol, name: p.name, rows: [], shares: 0, costTwd: 0, valueTwd: 0, pnl: 0 };
+    const key = `${p.symbol}`;
+    if (!acc[key]) acc[key] = { key, market: p.market, symbol: p.symbol, note: p.name, rows: [], shares: 0, costTwd: 0, valueTwd: 0, pnl: 0 };
     acc[key].rows.push(p); acc[key].shares += p.shares; acc[key].costTwd += p.costTwd; acc[key].valueTwd += p.valueTwd; acc[key].pnl += p.pnl;
     return acc;
   }, {})).map(g => ({ ...g, roi: g.costTwd ? g.pnl / g.costTwd : 0 }));
@@ -67,7 +67,7 @@ function renderSummary(result){const debtRatio=result.assets?result.liabilitiesT
 
 function renderTables(result){
   const groupHtml = result.grouped.map(g => `
-    <tr class="group-row"><td>${g.market}</td><td>${g.symbol}</td><td>${g.name}</td><td>${format(g.shares)}</td><td>${format(g.costTwd)}</td><td>${format(g.valueTwd)}</td><td class="${g.pnl>=0?'positive':'negative'}">${format(g.pnl)}</td><td class="${g.roi>=0?'positive':'negative'}">${percent(g.roi)}</td><td>-</td></tr>
+    <tr class="group-row"><td>${g.market}</td><td>${g.symbol}</td><td>${g.note||'-'}</td><td>${format(g.shares)}</td><td>${format(g.costTwd)}</td><td>${format(g.valueTwd)}</td><td class="${g.pnl>=0?'positive':'negative'}">${format(g.pnl)}</td><td class="${g.roi>=0?'positive':'negative'}">${percent(g.roi)}</td><td>-</td></tr>
     <tr><td colspan="9"><details><summary>查看此標的明細 (${g.rows.length} 筆)</summary>
       <table class="subtable"><thead><tr><th>買入日</th><th>股數</th><th>成本(TWD)</th><th>現值(TWD)</th><th>損益</th><th>操作</th></tr></thead><tbody>
       ${g.rows.map(r=>`<tr><td>${r.buyDate||'-'}</td><td>${format(r.shares)}</td><td>${format(r.costTwd)}</td><td>${format(r.valueTwd)}</td><td class="${r.pnl>=0?'positive':'negative'}">${format(r.pnl)}</td><td><button data-del-position="${r.id}">刪除</button></td></tr>`).join('')}
