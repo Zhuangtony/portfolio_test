@@ -10,12 +10,17 @@
 - 投組 vs Benchmark 折線圖，支援切換顯示 S&P500 / TAIEX / 兩者。
 - 支援新增持倉與新增負債（前端 Demo 狀態）。
 - 支援背景主題切換（深色/淺色），並記住使用者偏好。
+- 串接 Yahoo Finance API：可查詢代號是否存在，並取得真實市場報價。
 
 ## 如何啟動
-直接用瀏覽器開啟 `index.html` 即可，或使用簡易靜態伺服器：
+請用 Python server 啟動（含 `/api/quote`）：
 
 ```bash
-python3 -m http.server 8000
+python3 server.py
 ```
 
 然後開啟 `http://localhost:8000`。
+
+## Yahoo 查價 API
+- Endpoint: `GET /api/quote?symbol=AAPL&market=US`
+- 台股可用：`GET /api/quote?symbol=2330&market=TW`（會自動轉為 `2330.TW`）
