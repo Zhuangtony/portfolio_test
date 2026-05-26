@@ -7,25 +7,66 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 PORT = 8000
 
 
-def yahoo_quote(symbol: str):
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?interval=1d&range=1d"
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+def _fetch_json(url: str):
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
     with urllib.request.urlopen(req, timeout=10) as r:
-        data = json.loads(r.read().decode("utf-8"))
-    chart = data.get("chart", {})
-    result = chart.get("result")
+        return json.loads(r.read().decode("utf-8"))
+
+
+def yahoo_quote_chart(symbol: str):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?interval=1d&range=1d"
+    data = _fetch_json(url)
+    result = (data.get("chart") or {}).get("result")
     if not result:
-        return {"exists": False, "symbol": symbol, "error": "Symbol not found"}
+        return None
     meta = result[0].get("meta", {})
+    price = meta.get("regularMarketPrice")
+    if price is None:
+        return None
     return {
         "exists": True,
         "symbol": meta.get("symbol", symbol),
         "name": meta.get("longName") or meta.get("shortName") or meta.get("symbol", symbol),
         "currency": meta.get("currency"),
-        "price": meta.get("regularMarketPrice"),
+        "price": price,
         "previousClose": meta.get("previousClose"),
         "exchangeName": meta.get("exchangeName"),
+        "source": "chart",
     }
+
+
+def yahoo_quote_v7(symbol: str):
+    url = f"https://query1.finance.yahoo.com/v7/finance/quote?symbols={urllib.parse.quote(symbol)}"
+    data = _fetch_json(url)
+    items = ((data.get("quoteResponse") or {}).get("result") or [])
+    if not items:
+        return None
+    q = items[0]
+    price = q.get("regularMarketPrice")
+    if price is None:
+        return None
+    return {
+        "exists": True,
+        "symbol": q.get("symbol", symbol),
+        "name": q.get("longName") or q.get("shortName") or q.get("symbol", symbol),
+        "currency": q.get("currency"),
+        "price": price,
+        "previousClose": q.get("regularMarketPreviousClose"),
+        "exchangeName": q.get("fullExchangeName") or q.get("exchange"),
+        "source": "quote",
+    }
+
+
+def yahoo_quote(symbol: str):
+    errors = []
+    for fn in (yahoo_quote_chart, yahoo_quote_v7):
+        try:
+            quote = fn(symbol)
+            if quote:
+                return quote
+        except Exception as e:
+            errors.append(f"{fn.__name__}: {e}")
+    return {"exists": False, "symbol": symbol, "error": " | ".join(errors) or "Symbol not found"}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -41,16 +82,14 @@ class Handler(SimpleHTTPRequestHandler):
             final_symbol = symbol.upper()
             if market == "TW" and final_symbol.isdigit() and ".TW" not in final_symbol:
                 final_symbol = f"{final_symbol}.TW"
-            try:
-                payload = yahoo_quote(final_symbol)
-                self.send_json(payload, 200)
-            except Exception as e:
-                self.send_json({"exists": False, "symbol": final_symbol, "error": str(e)}, 502)
+            payload = yahoo_quote(final_symbol)
+            code = 200 if payload.get("exists") else 502
+            self.send_json(payload, code)
             return
         super().do_GET()
 
     def send_json(self, payload, code=200):
-        raw = json.dumps(payload).encode("utf-8")
+        raw = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(raw)))

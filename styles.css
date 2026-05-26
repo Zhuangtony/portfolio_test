@@ -46,7 +46,7 @@ th, td { padding: 9px 6px; border-bottom: 1px solid var(--border); text-align: r
 th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3), td:nth-child(3) { text-align: left; }
 
 .inline-input { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
-#statusText { margin-left: 8px; font-size: 0.9rem; }
+#statusText.form-status { margin-top: 8px; min-height: 1.2em; font-size: 0.9rem; }
 .market-panel { grid-template-columns: 1fr; }
 @media (min-width: 960px) { .market-panel { grid-template-columns: 0.95fr 1.05fr; } }
 .compact-chart-wrap { max-width: 300px; max-height: 300px; margin: 0 auto 10px; }
