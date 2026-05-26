@@ -70,3 +70,5 @@ th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3
 .subtable { width: 100%; margin-top: 8px; }
 .subtable th, .subtable td { font-size: 0.85rem; }
 #positionsTable details summary { cursor: pointer; color: var(--subtle); }
+
+.version-badge { font-size: 0.8rem; padding: 4px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--subtle); margin-right: 8px; }

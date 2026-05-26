@@ -108,6 +108,28 @@ def twse_quote(symbol: str):
     }
 
 
+
+
+def yahoo_search(query: str):
+    url = f"https://query1.finance.yahoo.com/v1/finance/search?q={urllib.parse.quote(query)}"
+    data = _fetch_json(url)
+    quotes = data.get("quotes") or []
+    out = []
+    for q in quotes[:10]:
+        sym = q.get("symbol")
+        if sym:
+            out.append({"symbol": sym, "name": q.get("shortname") or q.get("longname") or sym})
+    return out
+
+
+def local_symbol_suggestions(query: str):
+    base = [
+        ("AAPL","Apple"),("MSFT","Microsoft"),("NVDA","NVIDIA"),("TSLA","Tesla"),("VOO","Vanguard S&P 500 ETF"),
+        ("QQQ","Invesco QQQ"),("2330.TW","台積電"),("0050.TW","元大台灣50"),("2317.TW","鴻海"),("2454.TW","聯發科")
+    ]
+    q = query.upper()
+    return [{"symbol":s,"name":n} for s,n in base if q in s or q in n.upper()][:10]
+
 def get_quote(symbol: str):
     errors = []
     sources = [yahoo_quote_chart, yahoo_quote_v7, stooq_quote, twse_quote]
@@ -124,6 +146,21 @@ def get_quote(symbol: str):
 class Handler(SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/api/suggest":
+            query = (urllib.parse.parse_qs(parsed.query).get("q") or [""])[0].strip()
+            if not query:
+                self.send_json({"items": []}, 200); return
+            items = local_symbol_suggestions(query)
+            try:
+                remote = yahoo_search(query)
+                seen = {i["symbol"] for i in items}
+                for r in remote:
+                    if r["symbol"] not in seen:
+                        items.append(r); seen.add(r["symbol"])
+            except Exception:
+                pass
+            self.send_json({"items": items[:10]}, 200)
+            return
         if parsed.path == "/api/quote":
             query = urllib.parse.parse_qs(parsed.query)
             symbol = (query.get("symbol") or [""])[0].strip()
