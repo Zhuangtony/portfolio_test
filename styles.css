@@ -54,3 +54,8 @@ th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:nth-child(3
 .line-chart-wrap { min-height: 320px; }
 .allocation-list { display: grid; gap: 6px; margin-top: 8px; }
 .allocation-item { display: flex; justify-content: space-between; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; }
+.history-block { margin-top: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+.history-block summary { cursor: pointer; margin-bottom: 8px; }
+.history-item { display: grid; grid-template-columns: 1.2fr 60px 1fr 1fr 1.2fr; gap: 8px; font-size: 0.86rem; padding: 6px; border-bottom: 1px solid var(--border); }
+.history-empty { color: var(--subtle); font-size: 0.9rem; }
+#positionsTable button, #liabilitiesTable button { padding: 4px 8px; font-size: 0.82rem; }
