@@ -23,6 +23,25 @@ const percent = n => `${(n * 100).toFixed(2)}%`;
 const setStatus = (text, isError = false) => { const el = document.getElementById('statusText'); el.textContent = text; el.className = isError ? 'form-status negative' : 'form-status positive'; };
 async function fetchQuote(symbol, market) { const res = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}&market=${encodeURIComponent(market)}`); if (!res.ok) throw new Error(await res.text()); return res.json(); }
 async function fetchSuggestions(q) { const res = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`); if (!res.ok) return []; const data = await res.json(); return data.items || []; }
+const localSuggestionFallback = query => {
+  const base = [
+    { symbol: 'AAPL', name: 'Apple' }, { symbol: 'MSFT', name: 'Microsoft' }, { symbol: 'NVDA', name: 'NVIDIA' },
+    { symbol: 'TSLA', name: 'Tesla' }, { symbol: 'VOO', name: 'Vanguard S&P 500 ETF' }, { symbol: 'QQQ', name: 'Invesco QQQ' },
+    { symbol: '2330.TW', name: '台積電' }, { symbol: '0050.TW', name: '元大台灣50' }, { symbol: '2317.TW', name: '鴻海' }, { symbol: '2454.TW', name: '聯發科' },
+  ];
+  const q = String(query || '').trim().toUpperCase();
+  if (!q) return [];
+  return base.filter(i => i.symbol.includes(q) || String(i.name || '').toUpperCase().includes(q)).slice(0, 10);
+};
+async function fetchSuggestionsSafe(q) {
+  try {
+    const items = await fetchSuggestions(q);
+    if (Array.isArray(items) && items.length) return items;
+    return localSuggestionFallback(q);
+  } catch {
+    return localSuggestionFallback(q);
+  }
+}
 
 function normalizeSymbolForMarket(symbol, market) {
   const upper = String(symbol || '').trim().toUpperCase();
@@ -95,7 +114,7 @@ function bindEvents(){const result=calc();if(!state.valueHistory.length)state.va
   async function autoFillPrice(){const market=String(marketInput.value||'US');const symbol=normalizeSymbolForMarket(symbolInput.value, market);clearQuoteCache();if(!symbol)return;setStatus('正在查詢 Yahoo Finance...');try{const quote=await fetchQuote(symbol,market);if(!quote.exists||quote.price==null)return setStatus(`查無標的或無報價：${symbol}`,true);positionForm.elements.price.value=Number(quote.price);positionForm.dataset.quoteName=quote.name||symbol.toUpperCase();positionForm.dataset.quoteSymbol=quote.symbol||symbol.toUpperCase();setStatus(`已帶入 ${quote.symbol} 現價 ${quote.price}`);}catch{setStatus('現價取得失敗，請稍後再試或手動輸入',true);}}
   symbolInput.addEventListener('blur',async ()=>{if(suppressBlur)return;hideSuggestions();await autoFillPrice();});
   symbolInput.addEventListener('focus',()=>{if(suggestionItems.length)renderSuggestionState('items');});
-  symbolInput.addEventListener('input',async ()=>{clearQuoteCache(); const q=String(symbolInput.value||'').trim(); if(q.length<1){suggestionItems=[]; hideSuggestions(); return;} renderSuggestionState('loading'); const items=await fetchSuggestions(q); suggestionItems=items; activeSuggestionIndex=-1; if(!items.length){renderSuggestionState('empty'); return;} renderSuggestionState('items');});
+  symbolInput.addEventListener('input',async ()=>{clearQuoteCache(); const q=String(symbolInput.value||'').trim(); if(q.length<1){suggestionItems=[]; hideSuggestions(); return;} renderSuggestionState('loading'); const items=await fetchSuggestionsSafe(q); suggestionItems=items; activeSuggestionIndex=-1; if(!items.length){renderSuggestionState('empty'); return;} renderSuggestionState('items');});
   symbolInput.addEventListener('keydown',async e=>{if(suggestionList.hidden&&['ArrowDown','ArrowUp'].includes(e.key)&&suggestionItems.length){renderSuggestionState('items');} if(e.key==='ArrowDown'){e.preventDefault();setActiveSuggestion(activeSuggestionIndex+1);}else if(e.key==='ArrowUp'){e.preventDefault();setActiveSuggestion(activeSuggestionIndex-1);}else if(e.key==='Enter'){if(!suggestionList.hidden&&activeSuggestionIndex>=0){e.preventDefault();await applySuggestion(suggestionItems[activeSuggestionIndex]);}}else if(e.key==='Escape'){hideSuggestions();}});
   suggestionList.addEventListener('mousedown',()=>{suppressBlur=true;});
   suggestionList.addEventListener('click',async e=>{const item=e.target.closest('.symbol-autocomplete-item');if(!item)return;const idx=Number(item.dataset.idx);await applySuggestion(suggestionItems[idx]);suppressBlur=false;});
