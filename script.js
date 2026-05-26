@@ -1,0 +1,104 @@
+const fx = { USD_TWD: 32.5 };
+const uid = () => `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+const now = () => new Date().toLocaleString('zh-TW');
+
+const state = {
+  positions: [
+    { id: uid(), market: 'US', symbol: 'AAPL', name: 'Apple', shares: 20, cost: 175, price: 198, ccy: 'USD', createdAt: now() },
+    { id: uid(), market: 'US', symbol: 'VOO', name: 'Vanguard S&P500 ETF', shares: 12, cost: 430, price: 480, ccy: 'USD', createdAt: now() },
+    { id: uid(), market: 'TW', symbol: '2330', name: '台積電', shares: 30, cost: 760, price: 880, ccy: 'TWD', createdAt: now() },
+  ],
+  liabilities: [
+    { id: uid(), type: '房貸', balance: 2800000, rate: 2.1, monthlyPayment: 28000, createdAt: now() },
+    { id: uid(), type: '信用貸款', balance: 320000, rate: 4.5, monthlyPayment: 9500, createdAt: now() },
+  ],
+  positionHistory: [],
+  liabilityHistory: [],
+  benchmark: 'both',
+};
+
+const benchmarkSeries = { labels: ['1月', '2月', '3月', '4月', '5月', '6月'], portfolio: [100, 103, 101, 108, 112, 115], sp500: [100, 102, 104, 106, 107, 110], twii: [100, 99, 102, 105, 103, 109] };
+let pieChart; let benchmarkChart;
+const toTwd = (amount, ccy) => (ccy === 'USD' ? amount * fx.USD_TWD : amount);
+const format = n => n.toLocaleString('zh-TW', { maximumFractionDigits: 0 });
+const percent = n => `${(n * 100).toFixed(2)}%`;
+const setStatus = (text, isError = false) => { const el = document.getElementById('statusText'); el.textContent = text; el.className = isError ? 'negative' : 'positive'; };
+
+async function fetchQuote(symbol, market) { const res = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}&market=${encodeURIComponent(market)}`); return res.json(); }
+
+function calc() {
+  const enriched = state.positions.map(p => {
+    const costTwd = toTwd(p.cost * p.shares, p.ccy), valueTwd = toTwd(p.price * p.shares, p.ccy), pnl = valueTwd - costTwd;
+    return { ...p, costTwd, valueTwd, pnl, roi: costTwd ? pnl / costTwd : 0 };
+  });
+  const assets = enriched.reduce((s, p) => s + p.valueTwd, 0), cost = enriched.reduce((s, p) => s + p.costTwd, 0), pnl = assets - cost;
+  const liabilitiesTotal = state.liabilities.reduce((s, l) => s + l.balance, 0), netWorth = assets - liabilitiesTotal;
+  return { enriched, assets, cost, pnl, liabilitiesTotal, netWorth };
+}
+
+function renderSummary(result) {
+  const cards = [['總資產', `NT$ ${format(result.assets)}`], ['總負債', `NT$ ${format(result.liabilitiesTotal)}`], ['淨資產', `NT$ ${format(result.netWorth)}`], ['未實現損益', `NT$ ${format(result.pnl)}`, result.pnl >= 0], ['投組報酬率', percent(result.cost ? result.pnl / result.cost : 0), result.pnl >= 0]];
+  document.getElementById('summaryCards').innerHTML = cards.map(([name, value, positive]) => `<article class="card"><div class="metric-name">${name}</div><div class="metric-value ${positive === undefined ? '' : positive ? 'positive' : 'negative'}">${value}</div></article>`).join('');
+}
+
+function renderTables(result) {
+  document.querySelector('#positionsTable tbody').innerHTML = result.enriched.map(p => `<tr><td>${p.market}</td><td>${p.symbol}</td><td>${p.name}</td><td>${format(p.shares)}</td><td>${format(p.costTwd)}</td><td>${format(p.valueTwd)}</td><td class="${p.pnl >= 0 ? 'positive' : 'negative'}">${format(p.pnl)}</td><td class="${p.roi >= 0 ? 'positive' : 'negative'}">${percent(p.roi)}</td><td><button data-del-position="${p.id}">刪除</button></td></tr>`).join('');
+  document.querySelector('#liabilitiesTable tbody').innerHTML = state.liabilities.map(l => `<tr><td>${l.type}</td><td>${format(l.balance)}</td><td>${l.rate.toFixed(2)}%</td><td>${format(l.monthlyPayment)}</td><td><button data-del-liability="${l.id}">刪除</button></td></tr>`).join('');
+
+  document.getElementById('positionHistory').innerHTML = state.positionHistory.length ? state.positionHistory.map(h => `<div class="history-item"><span>${h.at}</span><span>${h.action}</span><span>${h.symbol}</span><span>${h.market}</span><span>${h.note}</span></div>`).join('') : '<div class="history-empty">尚無持倉歷史</div>';
+  document.getElementById('liabilityHistory').innerHTML = state.liabilityHistory.length ? state.liabilityHistory.map(h => `<div class="history-item"><span>${h.at}</span><span>${h.action}</span><span>${h.type}</span><span>${h.note}</span></div>`).join('') : '<div class="history-empty">尚無負債歷史</div>';
+}
+
+function renderCharts(result) {
+  if (pieChart) pieChart.destroy(); if (benchmarkChart) benchmarkChart.destroy();
+  pieChart = new Chart(document.getElementById('assetPie'), { type: 'pie', data: { labels: result.enriched.map(p => `${p.symbol} (${p.market})`), datasets: [{ data: result.enriched.map(p => p.valueTwd) }] }, options: { maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } } });
+  const datasets = [{ label: '我的投組', data: benchmarkSeries.portfolio, borderColor: '#67b3ff' }]; if (state.benchmark !== 'twii') datasets.push({ label: 'S&P 500', data: benchmarkSeries.sp500, borderColor: '#39d98a' }); if (state.benchmark !== 'sp500') datasets.push({ label: 'TAIEX', data: benchmarkSeries.twii, borderColor: '#ffcb6b' });
+  benchmarkChart = new Chart(document.getElementById('benchmarkLine'), { type: 'line', data: { labels: benchmarkSeries.labels, datasets }, options: { responsive: true, interaction: { mode: 'index', intersect: false } } });
+  const totalAsset = result.assets || 1;
+  document.getElementById('allocationList').innerHTML = result.enriched.map(p => `<div class="allocation-item"><span>${p.symbol} (${p.market})</span><span>${((p.valueTwd / totalAsset) * 100).toFixed(1)}% / NT$ ${format(p.valueTwd)}</span></div>`).join('');
+}
+
+function rerender() { const result = calc(); renderSummary(result); renderTables(result); renderCharts(result); }
+
+function bindEvents() {
+  const body = document.body; const themeToggle = document.getElementById('themeToggle'); const savedTheme = localStorage.getItem('theme') || 'dark';
+  if (savedTheme === 'light') { body.classList.add('light'); themeToggle.textContent = '切換背景：淺色'; }
+  themeToggle.addEventListener('click', () => { body.classList.toggle('light'); const isLight = body.classList.contains('light'); localStorage.setItem('theme', isLight ? 'light' : 'dark'); themeToggle.textContent = `切換背景：${isLight ? '淺色' : '深色'}`; });
+
+  const positionForm = document.getElementById('positionForm');
+  document.getElementById('fetchQuoteBtn').addEventListener('click', async () => {
+    const data = new FormData(positionForm); const symbol = String(data.get('symbol') || '').trim(); const market = String(data.get('market') || 'US');
+    if (!symbol) return setStatus('請先輸入股票代號', true); setStatus('正在查詢 Yahoo Finance...');
+    const quote = await fetchQuote(symbol, market); if (!quote.exists || !quote.price) return setStatus(`查無標的或無報價：${symbol}`, true);
+    positionForm.elements.name.value = quote.name || symbol; positionForm.elements.price.value = Number(quote.price); setStatus(`已驗證 ${quote.symbol} 現價 ${quote.price} ${quote.currency}`);
+  });
+
+  positionForm.addEventListener('submit', e => {
+    e.preventDefault(); const data = new FormData(e.target); const market = String(data.get('market'));
+    const row = { id: uid(), market, symbol: String(data.get('symbol')).toUpperCase(), name: String(data.get('name')), shares: Number(data.get('shares')), cost: Number(data.get('cost')), price: Number(data.get('price')), ccy: market === 'US' ? 'USD' : 'TWD', createdAt: now() };
+    state.positions.push(row); state.positionHistory.unshift({ at: now(), action: '新增', symbol: row.symbol, market: row.market, note: `股數 ${row.shares}` });
+    e.target.reset(); rerender();
+  });
+
+  document.getElementById('liabilityForm').addEventListener('submit', e => {
+    e.preventDefault(); const data = new FormData(e.target);
+    const row = { id: uid(), type: String(data.get('type')), balance: Number(data.get('balance')), rate: Number(data.get('rate')), monthlyPayment: Number(data.get('monthlyPayment')), createdAt: now() };
+    state.liabilities.push(row); state.liabilityHistory.unshift({ at: now(), action: '新增', type: row.type, note: `餘額 ${format(row.balance)}` });
+    e.target.reset(); rerender();
+  });
+
+  document.getElementById('benchmarkSelect').addEventListener('change', e => { state.benchmark = e.target.value; rerender(); });
+
+  document.addEventListener('click', e => {
+    const pId = e.target.getAttribute('data-del-position');
+    if (pId) {
+      const idx = state.positions.findIndex(x => x.id === pId); if (idx >= 0) { const row = state.positions[idx]; state.positions.splice(idx, 1); state.positionHistory.unshift({ at: now(), action: '刪除', symbol: row.symbol, market: row.market, note: `刪除持倉` }); rerender(); }
+    }
+    const lId = e.target.getAttribute('data-del-liability');
+    if (lId) {
+      const idx = state.liabilities.findIndex(x => x.id === lId); if (idx >= 0) { const row = state.liabilities[idx]; state.liabilities.splice(idx, 1); state.liabilityHistory.unshift({ at: now(), action: '刪除', type: row.type, note: '刪除負債' }); rerender(); }
+    }
+  });
+}
+
+bindEvents(); rerender();
