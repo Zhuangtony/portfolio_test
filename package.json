@@ -1,0 +1,13 @@
+{
+  "name": "portfolio_test",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python3 server.py"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "yahoo-finance2": "^2.13.3"
+  }
+}
