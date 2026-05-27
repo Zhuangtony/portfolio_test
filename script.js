@@ -23,10 +23,41 @@ const percent = n => `${(n * 100).toFixed(2)}%`;
 const setStatus = (text, isError = false) => { const el = document.getElementById('statusText'); el.textContent = text; el.className = isError ? 'form-status negative' : 'form-status positive'; };
 async function fetchQuote(symbol, market) { const res = await fetch(`/api/quote?symbol=${encodeURIComponent(symbol)}&market=${encodeURIComponent(market)}`); if (!res.ok) throw new Error(await res.text()); return res.json(); }
 async function fetchSuggestions(q) { const res = await fetch(`/api/suggest?q=${encodeURIComponent(q)}`); if (!res.ok) return []; const data = await res.json(); return data.items || []; }
+const localSuggestionFallback = query => {
+  const base = [
+    { symbol: 'AAPL', name: 'Apple' }, { symbol: 'MSFT', name: 'Microsoft' }, { symbol: 'NVDA', name: 'NVIDIA' },
+    { symbol: 'TSLA', name: 'Tesla' }, { symbol: 'VOO', name: 'Vanguard S&P 500 ETF' }, { symbol: 'QQQ', name: 'Invesco QQQ' },
+    { symbol: '2330.TW', name: '台積電' }, { symbol: '0050.TW', name: '元大台灣50' }, { symbol: '2317.TW', name: '鴻海' }, { symbol: '2454.TW', name: '聯發科' },
+  ];
+  const q = String(query || '').trim().toUpperCase();
+  if (!q) return [];
+  return base.filter(i => i.symbol.includes(q) || String(i.name || '').toUpperCase().includes(q)).slice(0, 10);
+};
+async function fetchSuggestionsSafe(q) {
+  try {
+    const items = await fetchSuggestions(q);
+    if (Array.isArray(items) && items.length) return items;
+    return localSuggestionFallback(q);
+  } catch {
+    return localSuggestionFallback(q);
+  }
+}
 
 function normalizeSymbolForMarket(symbol, market) {
   const upper = String(symbol || '').trim().toUpperCase();
   if (market === 'TW' && /^\d+$/.test(upper) && !upper.endsWith('.TW')) return `${upper}.TW`;
+  return upper;
+}
+function inferMarketAndSymbol(inputSymbol) {
+  const raw = String(inputSymbol || '').trim().toUpperCase();
+  if (!raw) return { market: 'US', symbol: '' };
+  if (raw.endsWith('.TW')) return { market: 'TW', symbol: raw };
+  if (/^\d+$/.test(raw)) return { market: 'TW', symbol: `${raw}.TW` };
+  return { market: 'US', symbol: raw };
+}
+function toStoredSymbol(market, symbol) {
+  const upper = String(symbol || '').trim().toUpperCase();
+  if (market === 'TW' && upper.endsWith('.TW')) return upper.slice(0, -3);
   return upper;
 }
 
@@ -85,10 +116,24 @@ function rerender(){const result=calc();syncLatestHistory(result);renderSummary(
 function bindEvents(){const result=calc();if(!state.valueHistory.length)state.valueHistory=seedHistory(result);syncLatestHistory(result);const body=document.body,themeToggle=document.getElementById('themeToggle'),savedTheme=localStorage.getItem('theme')||'dark';if(savedTheme==='light'){body.classList.add('light');themeToggle.textContent='切換背景：淺色';}themeToggle.addEventListener('click',()=>{body.classList.toggle('light');const isLight=body.classList.contains('light');localStorage.setItem('theme',isLight?'light':'dark');themeToggle.textContent=`切換背景：${isLight?'淺色':'深色'}`;});
   document.getElementById('rangeControls').addEventListener('click',e=>{const btn=e.target.closest('button[data-range]');if(!btn)return;state.trendRange=btn.dataset.range;document.querySelectorAll('#rangeControls button').forEach(b=>b.classList.toggle('active',b===btn));rerender();});
   document.getElementById('customRangeForm').addEventListener('submit',e=>{e.preventDefault();const fd=new FormData(e.target);state.customRange.start=String(fd.get('start'));state.customRange.end=String(fd.get('end'));state.trendRange='CUSTOM';document.querySelectorAll('#rangeControls button').forEach(b=>b.classList.remove('active'));rerender();});
-  const positionForm=document.getElementById('positionForm'),symbolInput=positionForm.elements.symbol,marketInput=positionForm.elements.market;const suggestionList=document.getElementById('symbolSuggestions');const clearQuoteCache=()=>{delete positionForm.dataset.quoteName;delete positionForm.dataset.quoteSymbol;};
-  async function autoFillPrice(){const market=String(marketInput.value||'US');const symbol=normalizeSymbolForMarket(symbolInput.value, market);clearQuoteCache();if(!symbol)return;setStatus('正在查詢 Yahoo Finance...');try{const quote=await fetchQuote(symbol,market);if(!quote.exists||quote.price==null)return setStatus(`查無標的或無報價：${symbol}`,true);positionForm.elements.price.value=Number(quote.price);positionForm.dataset.quoteName=quote.name||symbol.toUpperCase();positionForm.dataset.quoteSymbol=quote.symbol||symbol.toUpperCase();setStatus(`已帶入 ${quote.symbol} 現價 ${quote.price}`);}catch{setStatus('現價取得失敗，請稍後再試或手動輸入',true);}}
-  symbolInput.addEventListener('blur',autoFillPrice);symbolInput.addEventListener('input',async ()=>{clearQuoteCache(); const q=String(symbolInput.value||'').trim(); if(q.length<1){suggestionList.innerHTML=''; return;} const items=await fetchSuggestions(q); suggestionList.innerHTML=items.map(i=>`<option value="${i.symbol}">${i.name}</option>`).join('');});marketInput.addEventListener('change',autoFillPrice);document.getElementById('fetchQuoteBtn').addEventListener('click',autoFillPrice);
-  positionForm.addEventListener('submit',e=>{e.preventDefault();const data=new FormData(e.target);const market=String(data.get('market'));const rawSymbol=normalizeSymbolForMarket(data.get('symbol'), market);const row={id:uid(),market,symbol:positionForm.dataset.quoteSymbol||rawSymbol,name:positionForm.dataset.quoteName||rawSymbol,shares:Number(data.get('shares')),cost:Number(data.get('cost')),price:Number(data.get('price')),ccy:market==='US'?'USD':'TWD',buyDate:String(data.get('buyDate'))};state.positions.push(row);state.positionHistory.unshift({at:now(),action:'新增',symbol:row.symbol,market:row.market,note:`買入日 ${row.buyDate}`});e.target.reset();clearQuoteCache();rerender();});
+  const positionForm=document.getElementById('positionForm'),symbolInput=positionForm.elements.symbol;const suggestionList=document.getElementById('symbolAutocompleteList');const clearQuoteCache=()=>{delete positionForm.dataset.quoteName;delete positionForm.dataset.quoteSymbol;};let quoteReqSeq=0;
+  let suggestionItems=[]; let activeSuggestionIndex=-1; let suppressBlur=false;
+  const hideSuggestions=()=>{suggestionList.hidden=true; suggestionList.innerHTML=''; activeSuggestionIndex=-1;};
+  const showSuggestions=()=>{suggestionList.hidden=false;};
+  const renderSuggestionState=(type)=>{showSuggestions();if(type==='loading'){suggestionList.innerHTML='<div class="symbol-autocomplete-loading">載入中...</div>';return;}if(type==='empty'){suggestionList.innerHTML='<div class="symbol-autocomplete-empty">查無建議代碼</div>';return;}suggestionList.innerHTML=suggestionItems.map((i,idx)=>`<div class="symbol-autocomplete-item ${idx===activeSuggestionIndex?'active':''}" data-idx="${idx}"><strong>${i.symbol}</strong><span class="symbol-autocomplete-name">${i.name||''}</span></div>`).join('');};
+  const applySuggestion=async item=>{if(!item)return;symbolInput.value=item.symbol||'';const inferred=inferMarketAndSymbol(item.symbol||'');positionForm.dataset.quoteName=item.name||item.symbol||'';positionForm.dataset.quoteSymbol=toStoredSymbol(inferred.market, item.symbol||'');hideSuggestions();await autoFillPrice();};
+  const setActiveSuggestion=idx=>{if(!suggestionItems.length)return;activeSuggestionIndex=((idx%suggestionItems.length)+suggestionItems.length)%suggestionItems.length;renderSuggestionState('items');};
+  async function autoFillPrice(){const currentReq=++quoteReqSeq;const inferred=inferMarketAndSymbol(symbolInput.value);clearQuoteCache();if(!inferred.symbol)return;setStatus('正在查詢 Yahoo Finance...');try{const quote=await fetchQuote(inferred.symbol,inferred.market);if(currentReq!==quoteReqSeq)return;if(!quote.exists||quote.price==null)return setStatus(`查無標的或無報價：${inferred.symbol}`,true);positionForm.elements.price.value=Number(quote.price);positionForm.dataset.quoteName=quote.name||inferred.symbol.toUpperCase();positionForm.dataset.quoteSymbol=toStoredSymbol(inferred.market, quote.symbol||inferred.symbol);setStatus(`已帶入 ${quote.symbol} 現價 ${quote.price}`);}catch{if(currentReq!==quoteReqSeq)return;setStatus('現價取得失敗，請稍後再試或手動輸入',true);}}
+  symbolInput.addEventListener('blur',async ()=>{if(suppressBlur)return;hideSuggestions();await autoFillPrice();});
+  symbolInput.addEventListener('focus',()=>{if(suggestionItems.length)renderSuggestionState('items');});
+  symbolInput.addEventListener('input',async ()=>{clearQuoteCache(); const q=String(symbolInput.value||'').trim(); if(q.length<1){suggestionItems=[]; hideSuggestions(); return;} renderSuggestionState('loading'); const items=await fetchSuggestionsSafe(q); suggestionItems=items; activeSuggestionIndex=-1; if(!items.length){renderSuggestionState('empty'); return;} renderSuggestionState('items');});
+  symbolInput.addEventListener('keydown',async e=>{if(suggestionList.hidden&&['ArrowDown','ArrowUp'].includes(e.key)&&suggestionItems.length){renderSuggestionState('items');} if(e.key==='ArrowDown'){e.preventDefault();setActiveSuggestion(activeSuggestionIndex+1);}else if(e.key==='ArrowUp'){e.preventDefault();setActiveSuggestion(activeSuggestionIndex-1);}else if(e.key==='Enter'){if(!suggestionList.hidden&&activeSuggestionIndex>=0){e.preventDefault();await applySuggestion(suggestionItems[activeSuggestionIndex]);}}else if(e.key==='Escape'){hideSuggestions();}});
+  suggestionList.addEventListener('mousedown',()=>{suppressBlur=true;});
+  suggestionList.addEventListener('click',async e=>{const item=e.target.closest('.symbol-autocomplete-item');if(!item)return;const idx=Number(item.dataset.idx);await applySuggestion(suggestionItems[idx]);suppressBlur=false;});
+  suggestionList.addEventListener('mouseup',()=>{setTimeout(()=>{suppressBlur=false;},0);});
+  document.addEventListener('click',e=>{if(!e.target.closest('.symbol-autocomplete'))hideSuggestions();});
+  document.getElementById('fetchQuoteBtn').addEventListener('click',autoFillPrice);
+  positionForm.addEventListener('submit',e=>{e.preventDefault();const data=new FormData(e.target);const inferred=inferMarketAndSymbol(data.get('symbol'));const normalizedSymbol=positionForm.dataset.quoteSymbol||toStoredSymbol(inferred.market, inferred.symbol);const row={id:uid(),market:inferred.market,symbol:normalizedSymbol,name:positionForm.dataset.quoteName||normalizedSymbol,shares:Number(data.get('shares')),cost:Number(data.get('cost')),price:Number(data.get('price')),ccy:inferred.market==='US'?'USD':'TWD',buyDate:String(data.get('buyDate'))};state.positions.push(row);state.positionHistory.unshift({at:now(),action:'新增',symbol:row.symbol,market:row.market,note:`買入日 ${row.buyDate}`});e.target.reset();clearQuoteCache();rerender();});
   document.getElementById('liabilityForm').addEventListener('submit',e=>{e.preventDefault();const data=new FormData(e.target);const balance = Number(data.get('balance')); const rate = Number(data.get('rate')); const termMonths = Number(data.get('termMonths')); const monthlyPayment = calcMonthlyPayment(balance, rate, termMonths); const row={id:uid(),type:String(data.get('type')),balance,rate,monthlyPayment,startDate:String(data.get('startDate')),termMonths,fees:Number(data.get('fees')||0)};state.liabilities.push(row);state.liabilityHistory.unshift({at:now(),action:'新增',type:row.type,note:`餘額 ${format(row.balance)}`});e.target.reset();rerender();});
   document.getElementById('benchmarkSelect').addEventListener('change',e=>{state.benchmark=e.target.value;rerender();});
   document.addEventListener('click',e=>{const pId=e.target.getAttribute('data-del-position');if(pId){const idx=state.positions.findIndex(x=>x.id===pId);if(idx>=0){state.positions.splice(idx,1);rerender();}}const lId=e.target.getAttribute('data-del-liability');if(lId){const idx=state.liabilities.findIndex(x=>x.id===lId);if(idx>=0){state.liabilities.splice(idx,1);rerender();}}});}
