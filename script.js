@@ -119,8 +119,10 @@ function setupPositionAutocomplete(positionForm) {
   const suggestionList = document.getElementById('symbolAutocompleteList');
   const clearQuoteCache = () => { delete positionForm.dataset.quoteName; delete positionForm.dataset.quoteSymbol; };
   let quoteReqSeq = 0; let suggestReqSeq = 0;
-  let suggestionItems = []; let activeSuggestionIndex = -1; let suppressBlur = false;
+  let suggestionItems = []; let suggestionQuery = ''; let activeSuggestionIndex = -1; let suppressBlur = false;
+  const currentSuggestionQuery = () => String(symbolInput.value || '').trim();
   const hideSuggestions = () => { suggestionList.hidden = true; suggestionList.innerHTML = ''; activeSuggestionIndex = -1; };
+  const cancelSuggestions = () => { suggestReqSeq += 1; suggestionItems = []; suggestionQuery = ''; hideSuggestions(); };
   const showSuggestions = () => { suggestionList.hidden = false; };
   const renderSuggestionState = type => {
     showSuggestions();
@@ -130,16 +132,16 @@ function setupPositionAutocomplete(positionForm) {
   };
   const setActiveSuggestion = idx => { if (!suggestionItems.length) return; activeSuggestionIndex = ((idx % suggestionItems.length) + suggestionItems.length) % suggestionItems.length; renderSuggestionState('items'); };
   const autoFillPrice = async () => { const currentReq = ++quoteReqSeq; const inferred = inferMarketAndSymbol(symbolInput.value); clearQuoteCache(); if (!inferred.symbol) return; setStatus('正在查詢 Yahoo Finance...'); try { const quote = await fetchQuote(inferred.symbol, inferred.market); if (currentReq !== quoteReqSeq) return; if (!quote.exists || quote.price == null) return setStatus(`查無標的或無報價：${inferred.symbol}`, true); positionForm.elements.price.value = Number(quote.price); positionForm.dataset.quoteName = quote.name || inferred.symbol.toUpperCase(); positionForm.dataset.quoteSymbol = toStoredSymbol(inferred.market, quote.symbol || inferred.symbol); setStatus(`已帶入 ${quote.symbol} 現價 ${quote.price}`); } catch { if (currentReq !== quoteReqSeq) return; setStatus('現價取得失敗，請稍後再試或手動輸入', true); } };
-  const applySuggestion = async item => { if (!item) return; symbolInput.value = item.symbol || ''; const inferred = inferMarketAndSymbol(item.symbol || ''); positionForm.dataset.quoteName = item.name || item.symbol || ''; positionForm.dataset.quoteSymbol = toStoredSymbol(inferred.market, item.symbol || ''); hideSuggestions(); await autoFillPrice(); };
+  const applySuggestion = async item => { if (!item) return; symbolInput.value = item.symbol || ''; const inferred = inferMarketAndSymbol(item.symbol || ''); positionForm.dataset.quoteName = item.name || item.symbol || ''; positionForm.dataset.quoteSymbol = toStoredSymbol(inferred.market, item.symbol || ''); cancelSuggestions(); await autoFillPrice(); };
 
-  symbolInput.addEventListener('blur', async () => { if (suppressBlur) return; hideSuggestions(); await autoFillPrice(); });
-  symbolInput.addEventListener('focus', () => { if (suggestionItems.length) renderSuggestionState('items'); });
-  symbolInput.addEventListener('input', async () => { clearQuoteCache(); const q = String(symbolInput.value || '').trim(); const reqId = ++suggestReqSeq; if (q.length < 1) { suggestionItems = []; hideSuggestions(); return; } renderSuggestionState('loading'); const items = await fetchSuggestionsSafe(q); const latestQ = String(symbolInput.value || '').trim(); if (reqId !== suggestReqSeq || latestQ !== q) return; suggestionItems = items; activeSuggestionIndex = -1; if (!items.length) { renderSuggestionState('empty'); return; } renderSuggestionState('items'); });
-  symbolInput.addEventListener('keydown', async e => { if (suggestionList.hidden && ['ArrowDown', 'ArrowUp'].includes(e.key) && suggestionItems.length) renderSuggestionState('items'); if (e.key === 'ArrowDown') { e.preventDefault(); setActiveSuggestion(activeSuggestionIndex + 1); } else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveSuggestion(activeSuggestionIndex - 1); } else if (e.key === 'Enter') { if (!suggestionList.hidden && activeSuggestionIndex >= 0) { e.preventDefault(); await applySuggestion(suggestionItems[activeSuggestionIndex]); } } else if (e.key === 'Escape') hideSuggestions(); });
+  symbolInput.addEventListener('blur', async () => { if (suppressBlur) return; cancelSuggestions(); await autoFillPrice(); });
+  symbolInput.addEventListener('focus', () => { if (suggestionItems.length && suggestionQuery === currentSuggestionQuery()) renderSuggestionState('items'); });
+  symbolInput.addEventListener('input', async () => { clearQuoteCache(); const q = currentSuggestionQuery(); const reqId = ++suggestReqSeq; suggestionItems = []; suggestionQuery = ''; if (q.length < 1) { hideSuggestions(); return; } renderSuggestionState('loading'); const items = await fetchSuggestionsSafe(q); if (reqId !== suggestReqSeq || currentSuggestionQuery() !== q || document.activeElement !== symbolInput) return; suggestionItems = items; suggestionQuery = q; activeSuggestionIndex = -1; if (!items.length) { renderSuggestionState('empty'); return; } renderSuggestionState('items'); });
+  symbolInput.addEventListener('keydown', async e => { const suggestionsMatchInput = suggestionQuery === currentSuggestionQuery(); if (suggestionList.hidden && ['ArrowDown', 'ArrowUp'].includes(e.key) && suggestionItems.length && suggestionsMatchInput) renderSuggestionState('items'); if (e.key === 'ArrowDown' && suggestionsMatchInput) { e.preventDefault(); setActiveSuggestion(activeSuggestionIndex + 1); } else if (e.key === 'ArrowUp' && suggestionsMatchInput) { e.preventDefault(); setActiveSuggestion(activeSuggestionIndex - 1); } else if (e.key === 'Enter') { if (!suggestionList.hidden && activeSuggestionIndex >= 0 && suggestionsMatchInput) { e.preventDefault(); await applySuggestion(suggestionItems[activeSuggestionIndex]); } } else if (e.key === 'Escape') cancelSuggestions(); });
   suggestionList.addEventListener('mousedown', () => { suppressBlur = true; });
   suggestionList.addEventListener('click', async e => { const item = e.target.closest('.symbol-autocomplete-item'); if (!item) return; const idx = Number(item.dataset.idx); await applySuggestion(suggestionItems[idx]); suppressBlur = false; });
   suggestionList.addEventListener('mouseup', () => { setTimeout(() => { suppressBlur = false; }, 0); });
-  document.addEventListener('click', e => { if (!(e.target instanceof Element)) return; if (!e.target.closest('.symbol-autocomplete')) hideSuggestions(); });
+  document.addEventListener('click', e => { if (!(e.target instanceof Element)) return; if (!e.target.closest('.symbol-autocomplete')) cancelSuggestions(); });
   document.getElementById('fetchQuoteBtn').addEventListener('click', autoFillPrice);
 
   return { clearQuoteCache };
